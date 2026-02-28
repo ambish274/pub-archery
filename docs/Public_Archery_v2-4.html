@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Archery Score Keeper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Mobile Viewport Fixes */
+        html { height: 100%; overflow: hidden; }
+        body {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            height: 100%; width: 100%; overflow: hidden;
+            overscroll-behavior-y: none; touch-action: manipulation;
+            padding-bottom: env(safe-area-inset-bottom); 
+            background-color: #0f172a; 
+        }
+        
+        .btn-raised {
+            transition: all 0.1s;
+            border-bottom-width: 4px;
+            border-color: rgba(0,0,0,0.3);
+            filter: brightness(100%);
+        }
+        .btn-raised:active {
+            transform: translateY(2px);
+            border-bottom-width: 0px;
+            margin-bottom: 4px; 
+            filter: brightness(90%);
+        }
+
+        .animate-pop { animation: pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .modal { transition: opacity 0.2s ease; }
+        .modal-content { transition: transform 0.2s ease; }
+        .modal.hidden { opacity: 0; pointer-events: none; }
+        .modal.hidden .modal-content { transform: scale(0.95); }
+
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        select, input { appearance: none; }
+
+        /* --- Visual Cues --- */
+        .section-active {
+            border-color: #10B981;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+            opacity: 1; pointer-events: auto;
+            transition: all 0.3s ease;
+        }
+        .section-inactive {
+            border-color: #475569; opacity: 0.5; pointer-events: none; 
+            transition: all 0.3s ease;
+        }
+        
+        .score-highlight {
+            color: #FACC15 !important;
+            text-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+            transition: color 0.3s ease;
+        }
+    </style>
+</head>
+<body class="text-slate-100 flex flex-col font-sans">
+
+    <header class="bg-slate-800 border-b border-slate-700 p-3 flex justify-between items-center z-10 shadow-md shrink-0 h-16">
+        <div class="flex items-center gap-2">
+            <i class="fa-solid fa-bullseye text-emerald-500 text-xl"></i>
+            <div>
+                <h1 class="font-bold text-lg tracking-wide leading-none">Archery<span class="text-emerald-500">Keeper</span></h1>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button id="reorder-btn" onclick="app.openReorderModal()" class="text-slate-300 hover:text-white p-2 hidden" title="Manage Shooters">
+                <i class="fa-solid fa-users text-xl"></i>
+            </button>
+            <button onclick="app.viewScoreCards()" class="text-slate-300 hover:text-white p-2" title="Scorecard">
+                <i class="fa-solid fa-table-list text-xl"></i>
+            </button>
+            <button onclick="app.confirmReset()" class="text-slate-300 hover:text-red-400 p-2" title="Reset Round">
+                <i class="fa-solid fa-rotate-right text-xl"></i>
+            </button>
+        </div>
+    </header>
+
+    <main id="main-container" class="flex-1 overflow-hidden relative w-full max-w-md mx-auto bg-slate-900 h-full">
+        
+        <div id="setup-screen" class="h-full flex flex-col relative">
+            <div class="flex-1 overflow-y-auto p-4 pb-48">
+                <h2 class="text-xl font-bold mb-4 text-center text-emerald-400">Round Setup</h2>
+                
+                <div id="step-1-container" class="mb-5 space-y-1 bg-slate-800/50 p-3 rounded-xl border-2 border-emerald-500/50 section-active transition-all">
+                    <label class="block text-sm font-bold text-emerald-400 uppercase tracking-wider mb-1">1. Select Round Type</label>
+                    <select id="round-type" class="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none text-base font-bold" onchange="app.handleRoundTypeChange()">
+                        <option value="" disabled selected>-- Please Select Round Type --</option>
+                        <optgroup label="3D">
+                            <option value="ibo">IBO 3D (11-10-8-5-0)</option>
+                            <option value="asa">ASA 3D (14-12-10-8-5-0)</option>
+                            <option value="nasp">NASP 3D (10-9-8-7-0)</option>
+                        </optgroup>
+                        <optgroup label="NFAA 5-Spot">
+                            <option value="nfaa_300">NFAA 300 (X=5)</option>
+                            <option value="nfaa_360">NFAA 360 (X=6)</option>
+                        </optgroup>
+                        <optgroup label="Vegas 3-Spot">
+                            <option value="vegas_300">Vegas 300 (X=10)</option>
+                            <option value="vegas_330">Vegas 330 (X=11)</option>
+                            <option value="vegas_450">Vegas 450 (X=10)</option>
+                            <option value="vegas_495">Vegas 495 (X=11)</option>
+                            <option value="vegas_600">Vegas 600 (X=10)</option>
+                            <option value="vegas_660">Vegas 660 (X=11)</option>
+                        </optgroup>
+                        <optgroup label="Custom">
+                            <option value="custom">Custom Round Builder...</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div id="custom-builder" class="mb-5 hidden bg-slate-800/80 p-3 rounded-xl border border-blue-500/50">
+                    <h3 class="font-bold text-blue-400 mb-2 text-sm uppercase">Custom Round</h3>
+                    <div id="custom-segments-list" class="space-y-3 mb-3"></div>
+                    <button onclick="app.addCustomSegment()" class="w-full py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/50 rounded-lg text-sm font-bold">
+                        + Add Another Target/Distance
+                    </button>
+                </div>
+
+                <div id="target-count-container" class="mb-5 space-y-1 hidden">
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider">Number of Targets</label>
+                    <div class="flex items-center bg-slate-800 rounded-lg border border-slate-600 p-1">
+                        <button onclick="document.getElementById('target-count').stepDown()" class="p-3 text-slate-400 hover:text-white"><i class="fa-solid fa-minus"></i></button>
+                        <input type="number" id="target-count" value="30" class="bg-transparent text-center w-full outline-none font-mono text-lg" min="1" max="100">
+                        <button onclick="document.getElementById('target-count').stepUp()" class="p-3 text-slate-400 hover:text-white"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                </div>
+
+                <div id="step-2-container" class="mb-4 bg-slate-800/50 p-4 rounded-xl border-2 border-slate-700/50 section-inactive transition-all">
+                    <label class="block text-sm font-bold text-emerald-400 uppercase tracking-wider mb-3">2. Add Shooter</label>
+                    <div class="space-y-4">
+                        <div>
+                            <input type="text" id="new-shooter-name" placeholder="Shooter Name" autocapitalize="words" class="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white outline-none focus:border-emerald-500 text-sm" onkeydown="if(event.key === 'Enter') app.addShooter()">
+                        </div>
+                        <button onclick="app.addShooter()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white p-3 rounded-lg font-bold shadow-lg active:scale-95 transition text-sm flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-plus"></i> Add Shooter
+                        </button>
+                    </div>
+                </div>
+                    
+                <div id="shooter-list" class="space-y-2"></div>
+            </div>
+
+            <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-900 via-slate-900 to-transparent z-20 flex flex-col items-center">
+                <button id="start-btn" onclick="app.startRound()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold py-3 rounded-xl text-lg shadow-xl shadow-emerald-900/30 active:scale-[0.98] transition mb-4">
+                    START ROUND
+                </button>
+                <div class="w-full max-w-[320px] aspect-[6/1] flex justify-center items-center overflow-hidden mb-2">
+                    <img src="banner.jpg" alt="Banner Ad" class="w-full h-full object-contain rounded-md shadow-lg bg-slate-800" onerror="this.style.display='none'">
+                </div>
+            </div>
+        </div>
+
+        <div id="scoring-screen" class="hidden h-full flex flex-col">
+            <div class="bg-slate-800/50 p-2 flex justify-between items-center text-xs sm:text-sm border-b border-slate-700 shrink-0 h-14">
+                <span id="round-info-display" class="text-slate-400 truncate max-w-[120px]">Round</span>
+                <span class="font-bold text-emerald-400 bg-emerald-900/30 px-3 py-1 rounded-full whitespace-nowrap text-lg shadow-lg border border-emerald-500/30">
+                    End <span id="current-end-display">1</span> / <span id="total-ends-display">20</span>
+                </span>
+            </div>
+
+            <div id="segment-info-bar" class="bg-blue-900/20 text-blue-300 text-xs text-center py-1 hidden border-b border-blue-900/30 shrink-0"></div>
+
+            <div class="flex overflow-x-auto whitespace-nowrap bg-slate-800 p-1 scrollbar-hide shrink-0 h-12 items-center" id="shooter-tabs"></div>
+
+            <div class="flex-1 flex flex-col p-3 min-h-0">
+                <div class="bg-slate-800 rounded-2xl p-3 mb-2 shadow-lg border border-slate-700 shrink-0">
+                    <div class="flex justify-between items-end mb-1">
+                        <div>
+                            <div class="text-slate-400 text-[10px] uppercase tracking-widest">Total</div>
+                            <div class="text-3xl font-black text-white leading-tight" id="running-total">0</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-slate-400 text-[10px] uppercase tracking-widest">This End</div>
+                            <div class="text-2xl font-bold text-emerald-400 leading-tight" id="end-total">0</div>
+                        </div>
+                    </div>
+                    <div id="halves-display" class="flex justify-between text-xs text-slate-400 border-t border-slate-700/50 pt-2 pb-1">
+                        <span>1st Half: <strong class="text-white text-sm" id="half1-total">0</strong></span>
+                        <span>2nd Half: <strong class="text-white text-sm" id="half2-total">0</strong></span>
+                    </div>
+                    <div class="flex gap-1.5 mt-1 justify-center flex-wrap" id="arrow-slots"></div>
+                </div>
+
+                <div class="flex justify-between items-center mb-3 px-1 shrink-0">
+                    <button onclick="app.undoLastArrow()" class="bg-slate-700 hover:bg-slate-600 text-white border border-slate-500 px-6 h-14 rounded-xl font-bold shadow-md active:scale-95 transition text-md sm:text-lg flex items-center">
+                        <i class="fa-solid fa-rotate-left mr-2"></i> Undo
+                    </button>
+                    <button onclick="app.nextShooterOrEnd()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 h-14 rounded-xl font-bold shadow-md active:scale-95 transition text-md sm:text-lg flex items-center">
+                        Next <i class="fa-solid fa-chevron-right ml-2"></i>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto pb-safe">
+                    <div id="keypad"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="reorder-modal" class="modal hidden fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4">
+        <div class="modal-content bg-slate-800 p-5 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-600 flex flex-col max-h-[80vh]">
+            <h4 class="text-xl font-bold mb-4 text-emerald-400 text-center">Manage Shooters</h4>
+            <div id="reorder-list" class="space-y-2 flex-1 overflow-y-auto mb-4"></div>
+            <button onclick="app.closeReorderModal()" class="w-full py-3 bg-slate-700 rounded-lg text-white font-bold">Done</button>
+        </div>
+    </div>
+
+    <div id="notification-modal" class="modal hidden fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4">
+        <div class="modal-content bg-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-600 text-center">
+            <h4 class="text-2xl font-bold mb-4 text-emerald-400">ArcheryKeeper</h4>
+            <p id="notification-message" class="text-white mb-8 text-xl font-medium leading-relaxed"></p>
+            <button onclick="app.closeNotification()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-lg shadow-lg">OK</button>
+        </div>
+    </div>
+
+    <div id="confirmation-modal" class="modal hidden fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4">
+        <div class="modal-content bg-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-600 text-center">
+            <h4 class="text-xl font-bold mb-3 text-emerald-400">ArcheryKeeper</h4>
+            <p id="confirmation-message" class="text-slate-300 mb-6 text-lg"></p>
+            <div class="flex gap-3">
+                <button onclick="app.closeConfirmation(false)" class="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-bold">Cancel</button>
+                <button onclick="app.closeConfirmation(true)" class="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold shadow-lg">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="scorecard-modal" class="modal hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-end sm:items-center justify-center">
+        <div class="modal-content bg-slate-900 w-full sm:w-11/12 sm:max-w-xl h-[95dvh] sm:h-5/6 sm:rounded-2xl border-t sm:border border-slate-700 flex flex-col shadow-2xl">
+            <div class="p-3 border-b border-slate-700 flex justify-between items-center bg-slate-800 sm:rounded-t-2xl shrink-0">
+                <h3 class="font-bold text-lg text-emerald-400">Scorecard</h3>
+                <button onclick="app.closeScoreCard()" class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="flex-1 overflow-hidden flex flex-col">
+                <div class="p-2 bg-slate-800/50 overflow-x-auto whitespace-nowrap shrink-0 border-b border-slate-700" id="modal-shooter-tabs"></div>
+                <div class="flex-1 overflow-y-auto p-2">
+                    <div id="scorecard-header-info" class="mb-2 p-2 bg-slate-800 rounded border border-slate-700 text-xs text-slate-300 flex justify-between items-center"></div>
+                    <table class="w-full text-center border-collapse text-sm" id="scorecard-table"><thead id="scorecard-head"></thead><tbody id="scorecard-body"></tbody></table>
+                </div>
+            </div>
+            
+            <div class="p-4 pb-20 border-t border-slate-700 bg-slate-800 sm:rounded-b-2xl shrink-0 export-footer flex flex-col items-center">
+                <div class="flex gap-3 mb-4 w-full">
+                    <button onclick="app.openTextExportModal()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold text-sm shadow-md flex flex-col items-center justify-center gap-1 transition-transform active:scale-95"><i class="fa-solid fa-align-left text-xl text-slate-400"></i> Copy to Share</button>
+                    <button onclick="app.shareScorecardImage()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-bold text-sm shadow-md flex flex-col items-center justify-center gap-1 transition-transform active:scale-95"><i class="fa-solid fa-image text-xl text-emerald-200"></i> Share Image</button>
+                </div>
+                <div class="w-full max-w-[320px] aspect-[6/1] flex justify-center items-center overflow-hidden mb-2">
+                    <img src="banner.jpg" alt="Banner Ad" class="w-full h-full object-contain rounded-md shadow-md" onerror="this.style.display='none'">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="text-export-modal" class="modal hidden fixed inset-0 z-[90] bg-black/95 flex flex-col items-center justify-center p-4">
+        <div class="w-full max-w-sm bg-slate-800 rounded-xl overflow-hidden shadow-2xl border border-slate-600 flex flex-col">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+                <h3 class="font-bold text-emerald-400 text-lg">Text Format Options</h3>
+                <button onclick="app.closeTextExportModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            <div class="p-4 flex flex-col gap-3">
+                <button onclick="app.copyToClipboard()" class="w-full py-4 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold text-md flex items-center justify-center gap-2"><i class="fa-solid fa-copy"></i> Copy</button>
+                <button onclick="app.nativeShareText()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-md shadow-lg flex items-center justify-center gap-2"><i class="fa-solid fa-share-nodes"></i> Share</button>
+                <button onclick="app.closeTextExportModal()" class="w-full py-3 mt-2 bg-transparent text-slate-400 hover:text-white rounded-lg font-bold text-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="image-preview-modal" class="modal hidden fixed inset-0 z-[90] bg-black/95 flex flex-col items-center justify-center p-4">
+        <div class="w-full max-w-lg bg-slate-800 rounded-xl overflow-hidden shadow-2xl border border-slate-600 flex flex-col max-h-[85vh]">
+            <div class="p-3 border-b border-slate-700 flex justify-between items-center">
+                <h3 class="font-bold text-emerald-400">Image Format Options</h3>
+                <button onclick="app.closeImagePreview()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            <div class="flex-1 overflow-auto p-4 bg-slate-900 flex justify-center items-start">
+                <img id="preview-img-tag" class="max-w-full h-auto shadow-lg rounded" alt="Scorecard Preview" />
+            </div>
+            
+            <div class="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3">
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="app.copyImageToClipboard()" class="py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-1"><i class="fa-solid fa-copy"></i> Copy</button>
+                    <button onclick="app.downloadImageLocal()" class="py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-1"><i class="fa-solid fa-download"></i> Save</button>
+                    <button onclick="app.nativeShareImage()" class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-sm shadow-lg flex items-center justify-center gap-1"><i class="fa-solid fa-share-nodes"></i> Share</button>
+                </div>
+                <button onclick="app.closeImagePreview()" class="w-full py-2 bg-transparent text-slate-400 hover:text-white rounded-lg font-bold text-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-score-modal" class="modal hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
+        <div class="modal-content bg-slate-800 p-5 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-600 flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center mb-3">
+                <h4 class="text-lg font-bold text-emerald-400">Correct Score</h4>
+                <div class="text-sm text-slate-400" id="edit-score-context-header"></div>
+            </div>
+            <div id="edit-arrows-row" class="flex gap-2 justify-center mb-4 bg-slate-700/50 p-3 rounded-xl overflow-x-auto"></div>
+            <div class="flex-1 overflow-y-auto mb-4">
+                <div id="edit-keypad"></div>
+            </div>
+            <button onclick="app.saveEdits()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-lg text-lg shrink-0">Done</button>
+        </div>
+    </div>
+
+    <div id="edit-profile-modal" class="modal hidden fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
+        <div class="modal-content bg-slate-800 p-5 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-600">
+            <h4 class="text-center text-lg font-bold mb-4 text-emerald-400">Edit Profile</h4>
+            <div class="space-y-4 mb-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Name</label>
+                    <input type="text" id="edit-profile-name" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white outline-none focus:border-emerald-500 text-sm" autocapitalize="words">
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="app.closeEditProfile()" class="flex-1 py-3 bg-slate-700 rounded-lg text-slate-300 font-bold">Cancel</button>
+                <button onclick="app.saveProfile()" class="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-bold">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <textarea id="clipboard-target" class="fixed top-0 left-0 opacity-0 pointer-events-none"></textarea>
+    <div id="toast" class="fixed top-24 left-1/2 transform -translate-x-1/2 bg-slate-800/95 border-2 border-emerald-500 text-white px-8 py-6 rounded-2xl shadow-2xl opacity-0 transition-all duration-300 pointer-events-none z-[90] text-center w-[90%] max-w-sm backdrop-blur-sm scale-90"><div id="toast-msg" class="text-2xl font-black tracking-wide text-emerald-400"></div></div>
+
+    <script>
+        const app = {
+            data: {
+                shooters: [],
+                roundType: '', 
+                customRound: null, 
+                targetCount: 30, 
+                arrowsPerEnd: 1, 
+                currentEnd: 1,
+                currentShooterIndex: 0,
+                active: false
+            },
+
+            editingProfileIndex: null,
+            confirmCallback: null,
+            notificationCallback: null,
+            autoAdvanceTimer: null,
+            roundCompleteTimer: null,
+            transitionTimer: null,
+            isTransitioning: false,
+            generatedBlob: null,
+            runtimeArrowsPerEnd: 1,
+
+            configs: {
+                ibo: { name: 'IBO 3D', arrows: 1, ends: 30, cols: 2, keys: [{ label: '11', value: 11, color: 'bg-orange-500' }, { label: '10', value: 10, color: 'bg-yellow-500 text-black' }, { label: '8', value: 8, color: 'bg-red-600' }, { label: '5', value: 5, color: 'bg-blue-600' }, { label: '0', value: 0, color: 'bg-gray-500 text-white', span: 'col-span-2' }] },
+                asa: { name: 'ASA 3D', arrows: 1, ends: 30, cols: 3, keys: [{ label: '14', value: 14, color: 'bg-purple-500' }, { label: '12', value: 12, color: 'bg-orange-500' }, { label: '10', value: 10, color: 'bg-yellow-500 text-black' }, { label: '8', value: 8, color: 'bg-red-600' }, { label: '5', value: 5, color: 'bg-blue-600' }, { label: '0', value: 0, color: 'bg-gray-500 text-white' }] },
+                nasp: { name: 'NASP 3D', arrows: 5, ends: 6, cols: 3, keys: [{ label: '10', value: 10, color: 'bg-yellow-500 text-black' }, { label: '9', value: 9, color: 'bg-yellow-400 text-black' }, { label: '8', value: 8, color: 'bg-red-600' }, { label: '7', value: 7, color: 'bg-blue-600' }, { label: '0', value: 0, color: 'bg-gray-500 text-white', span: 'col-span-2' }] },
+                nfaa_300: { name: 'NFAA 300', arrows: 5, ends: 12, cols: 3, keys: [{ label: 'X', value: 5, display: 'X', color: 'bg-slate-100 text-slate-900 border-4 border-blue-800' }, { label: '5', value: 5, color: 'bg-slate-100 text-slate-900' }, { label: '4', value: 4, color: 'bg-blue-700' }, { label: '3', value: 3, color: 'bg-blue-700' }, { label: '2', value: 2, color: 'bg-blue-700' }, { label: '1', value: 1, color: 'bg-blue-700' }, { label: '0', value: 0, color: 'bg-gray-500 text-white', span: 'col-span-3' }] },
+                nfaa_360: { name: 'NFAA 360', arrows: 5, ends: 12, cols: 3, keys: [{ label: '6', value: 6, display: '6', color: 'bg-slate-100 text-slate-900 border-4 border-blue-800' }, { label: '5', value: 5, color: 'bg-slate-100 text-slate-900' }, { label: '4', value: 4, color: 'bg-blue-700' }, { label: '3', value: 3, color: 'bg-blue-700' }, { label: '2', value: 2, color: 'bg-blue-700' }, { label: '1', value: 1, color: 'bg-blue-700' }, { label: '0', value: 0, color: 'bg-gray-500 text-white', span: 'col-span-3' }] },
+                vegas_300: { name: 'Vegas 300', arrows: 3, ends: 10, cols: 3, keys: [{ label: 'X', value: 10, display: 'X', color: 'bg-yellow-400 text-black border-2 border-black' }, { label: '10', value: 10, color: 'bg-yellow-400 text-black' }, { label: '9', value: 9, color: 'bg-yellow-400 text-black' }, { label: '8', value: 8, color: 'bg-red-600' }, { label: '7', value: 7, color: 'bg-red-600' }, { label: '6', value: 6, color: 'bg-blue-600' }, { label: '5', value: 5, color: 'bg-blue-600' }, { label: '4', value: 4, color: 'bg-slate-900 border border-slate-600' }, { label: '3', value: 3, color: 'bg-slate-900 border border-slate-600' }, { label: '2', value: 2, color: 'bg-slate-100 text-slate-900' }, { label: '1', value: 1, color: 'bg-slate-100 text-slate-900' }, { label: 'M', value: 0, color: 'bg-gray-500 text-white' }] },
+                vegas_330: { name: 'Vegas 330', arrows: 3, ends: 10, cols: 3, keys: [{ label: '11', value: 11, display: '11', color: 'bg-yellow-400 text-black border-2 border-black' }, { label: '10', value: 10, color: 'bg-yellow-400 text-black' }, { label: '9', value: 9, color: 'bg-yellow-400 text-black' }, { label: '8', value: 8, color: 'bg-red-600' }, { label: '7', value: 7, color: 'bg-red-600' }, { label: '6', value: 6, color: 'bg-blue-600' }, { label: '5', value: 5, color: 'bg-blue-600' }, { label: '4', value: 4, color: 'bg-slate-900 border border-slate-600' }, { label: '3', value: 3, color: 'bg-slate-900 border border-slate-600' }, { label: '2', value: 2, color: 'bg-slate-100 text-slate-900' }, { label: '1', value: 1, color: 'bg-slate-100 text-slate-900' }, { label: 'M', value: 0, color: 'bg-gray-500 text-white' }] },
+                vegas_450: { name: 'Vegas 450', arrows: 3, ends: 15, cols: 3, keys: [{ label: 'X', value: 10, display: 'X', color: 'bg-yellow-400 text-black border-2 border-black' }, { label: '10', value: 10, color: 'bg-yellow-400 text-black' }, { label: '9', value: 9, color: 'bg-yellow-400 text-black' }, { label: '8', value: 8, color: 'bg-red-600' }, { label: '7', value: 7, color: 'bg-red-600' }, { label: '6', value: 6, color: 'bg-blue-600' }, { label: '5', value: 5, color: 'bg-blue-600' }, { label: '4', value: 4, color: 'bg-slate-900 border border-slate-600' }, { label: '3', value: 3, color: 'bg-slate-900 border border-slate-600' }, { label: '2', value: 2, color: 'bg-slate-100 text-slate-900' }, { label: '1', value: 1, color: 'bg-slate-100 text-slate-900' }, { label: 'M', value: 0, color: 'bg-gray-500 text-white' }] },
+                vegas_495: { name: 'Vegas 495', arrows: 3, ends: 15, cols: 3, keys: [{ label: '11', value: 11, display: '11', color: 'bg-yellow-400 text-black border-2 border-black' }, { label: '10', value: 10, color: 'bg-yellow-400 text-black' }, { label: '9', value: 9, color: 'bg-yellow-400 text-black' }, { label: '8', value: 8, color: 'bg-red-600' }, { label: '7', value: 7, color: 'bg-red-600' }, { label: '6', value: 6, color: 'bg-blue-600' }, { label: '5', value: 5, color: 'bg-blue-600' }, { label: '4', value: 4, color: 'bg-slate-900 border border-slate-600' }, { label: '3', value: 3, color: 'bg-slate-900 border border-slate-600' }, { label: '2', value: 2, color: 'bg-slate-100 text-slate-900' }, { label: '1', value: 1, color: 'bg-slate-100 text-slate-900' }, { label: 'M', value: 0, color: 'bg-gray-500 text-white' }] },
+                vegas_600: { name: 'Vegas 600', arrows: 3, ends: 20, cols: 3, keys: [{ label: 'X', value: 10, display: 'X', color: 'bg-yellow-400 text-black border-2 border-black' }, { label: '10', value: 10, color: 'bg-yellow-400 text-black' }, { label: '9', value: 9, color: 'bg-yellow-400 text-black' }, { label: '8', value: 8, color: 'bg-red-600' }, { label: '7', value: 7, color: 'bg-red-600' }, { label: '6', value: 6, color: 'bg-blue-600' }, { label: '5', value: 5, color: 'bg-blue-600' }, { label: '4', value: 4, color: 'bg-slate-900 border border-slate-600' }, { label: '3', value: 3, color: 'bg-slate-900 border border-slate-600' }, { label: '2', value: 2, color: 'bg-slate-100 text-slate-900' }, { label: '1', value: 1, color: 'bg-slate-100 text-slate-900' }, { label: 'M', value: 0, color: 'bg-gray-500 text-white' }] },
+                vegas_660: { name: 'Vegas 660', arrows: 3, ends: 20, cols: 3, keys: [{ label: '11', value: 11, display: '11', color: 'bg-yellow-400 text-black border-2 border-black' }, { label: '10', value: 10, color: 'bg-yellow-400 text-black' }, { label: '9', value: 9, color: 'bg-yellow-400 text-black' }, { label: '8', value: 8, color: 'bg-red-600' }, { label: '7', value: 7, color: 'bg-red-600' }, { label: '6', value: 6, color: 'bg-blue-600' }, { label: '5', value: 5, color: 'bg-blue-600' }, { label: '4', value: 4, color: 'bg-slate-900 border border-slate-600' }, { label: '3', value: 3, color: 'bg-slate-900 border border-slate-600' }, { label: '2', value: 2, color: 'bg-slate-100 text-slate-900' }, { label: '1', value: 1, color: 'bg-slate-100 text-slate-900' }, { label: 'M', value: 0, color: 'bg-gray-500 text-white' }] },
+                full_11: { name: '11-0 Full', arrows: 3, ends: 10, cols: 3, keys: [
+                    { label: '11', value: 11, color: 'bg-orange-500' }, { label: '10', value: 10, color: 'bg-yellow-500 text-black' }, { label: '9', value: 9, color: 'bg-yellow-400 text-black' },
+                    { label: '8', value: 8, color: 'bg-red-600' }, { label: '7', value: 7, color: 'bg-red-600' }, { label: '6', value: 6, color: 'bg-blue-600' },
+                    { label: '5', value: 5, color: 'bg-blue-600' }, { label: '4', value: 4, color: 'bg-black text-white' }, { label: '3', value: 3, color: 'bg-black text-white' },
+                    { label: '2', value: 2, color: 'bg-white text-black border border-slate-400' }, { label: '1', value: 1, color: 'bg-white text-black border border-slate-400' }, { label: '0', value: 0, color: 'bg-gray-500 text-white' }
+                ]}
+            },
+            
+            customSegments: [], 
+            
+            init() {
+                const storageKey = 'archeryState_v52';
+                const saved = localStorage.getItem(storageKey);
+                
+                if (saved) {
+                    let parsed = null;
+                    try {
+                        parsed = JSON.parse(saved);
+                    } catch (e) {
+                        console.error("Failed to parse saved state", e);
+                    }
+
+                    if (parsed && parsed.active) {
+                        this.data = Object.assign({}, this.data, parsed);
+                        this.showScreen('scoring');
+                        try {
+                            this.renderScoringUI();
+                        } catch (renderError) {
+                            console.error("Error drawing scoring UI on restore:", renderError);
+                        }
+                        return;
+                    }
+                }
+                
+                const roundSelect = document.getElementById('round-type');
+                if(roundSelect) roundSelect.value = "";
+                
+                this.showScreen('setup');
+                this.handleRoundTypeChange(); 
+            },
+
+            save() { 
+                try {
+                    localStorage.setItem('archeryState_v52', JSON.stringify(this.data)); 
+                } catch (e) {
+                    console.error("Failed to save to localStorage", e);
+                }
+            },
+            
+            formatName(str) { return str.toLowerCase().replace(/(?:^|[\s-])\w/g, function(match) { return match.toUpperCase(); }); },
+            showAlert(msg, callback) { document.getElementById('notification-message').innerHTML = msg; this.notificationCallback = callback; document.getElementById('notification-modal').classList.remove('hidden'); },
+            closeNotification() { document.getElementById('notification-modal').classList.add('hidden'); if (this.notificationCallback) { this.notificationCallback(); this.notificationCallback = null; } },
+            showConfirm(msg, callback) { document.getElementById('confirmation-message').textContent = msg; this.confirmCallback = callback; document.getElementById('confirmation-modal').classList.remove('hidden'); },
+            closeConfirmation(result) { document.getElementById('confirmation-modal').classList.add('hidden'); if (this.confirmCallback) this.confirmCallback(result); this.confirmCallback = null; },
+
+            showScreen(screenId) {
+                document.getElementById('setup-screen').classList.add('hidden');
+                document.getElementById('scoring-screen').classList.add('hidden');
+                document.getElementById(screenId + '-screen').classList.remove('hidden');
+                if(screenId === 'scoring') document.getElementById('reorder-btn').classList.remove('hidden');
+                else document.getElementById('reorder-btn').classList.add('hidden');
+            },
+
+            handleRoundTypeChange() {
+                const type = document.getElementById('round-type').value;
+                const targetCountDiv = document.getElementById('target-count-container');
+                const customBuilder = document.getElementById('custom-builder');
+                
+                if (!type) {
+                    document.getElementById('step-1-container').classList.add('section-active');
+                    document.getElementById('step-1-container').classList.remove('section-inactive');
+                    document.getElementById('step-2-container').classList.remove('section-active');
+                    document.getElementById('step-2-container').classList.add('section-inactive');
+                    
+                    targetCountDiv.classList.add('hidden');
+                    customBuilder.classList.add('hidden');
+                    return;
+                } else {
+                    document.getElementById('step-1-container').classList.remove('section-active');
+                    document.getElementById('step-1-container').classList.add('section-inactive');
+                    document.getElementById('step-2-container').classList.remove('section-inactive');
+                    document.getElementById('step-2-container').classList.add('section-active');
+                }
+
+                if (type === 'custom') {
+                    targetCountDiv.classList.add('hidden');
+                    customBuilder.classList.remove('hidden');
+                    if (this.customSegments.length === 0) this.addCustomSegment();
+                    this.renderCustomBuilder();
+                } else {
+                    targetCountDiv.classList.toggle('hidden', !['ibo', 'asa'].includes(type));
+                    customBuilder.classList.add('hidden');
+                }
+            },
+
+            addCustomSegment() {
+                this.customSegments.push({
+                    id: Date.now(),
+                    name: `Target/Distance ${this.customSegments.length + 1}`,
+                    ends: '',
+                    arrowsPerEnd: '',
+                    scoringType: '', 
+                    xValue: ''
+                });
+                this.renderCustomBuilder();
+            },
+            removeCustomSegment(idx) { 
+                this.customSegments.splice(idx, 1); 
+                this.renderCustomBuilder(); 
+            },
+            moveSegment(idx, dir) {
+                if (idx + dir < 0 || idx + dir >= this.customSegments.length) return;
+                const temp = this.customSegments[idx];
+                this.customSegments[idx] = this.customSegments[idx + dir];
+                this.customSegments[idx + dir] = temp;
+                this.renderCustomBuilder();
+            },
+            updateSegment(idx, field, val) {
+                const seg = this.customSegments[idx];
+                seg[field] = val;
+                if (field === 'scoringType') {
+                   if (val === 'ibo') seg.xValue = 11; 
+                   else if (val === 'asa') seg.xValue = 14;
+                   else if (val === 'nasp') seg.xValue = 10;
+                   else if (val === 'nfaa_360') seg.xValue = 6;
+                   else if (val === 'vegas_300') seg.xValue = 10;
+                   else if (val === 'nfaa_300') seg.xValue = 5;
+                   else if (val === 'full_11') seg.xValue = 11;
+                }
+                this.renderCustomBuilder();
+            },
+            
+            renderCustomBuilder() {
+                const list = document.getElementById('custom-segments-list');
+                list.innerHTML = this.customSegments.map((seg, i) => `
+                    <div class="bg-slate-700/50 p-2 rounded-lg border border-slate-600 text-sm">
+                        <div class="flex justify-between items-center mb-2">
+                            <div class="flex gap-2">
+                                <button onclick="app.moveSegment(${i}, -1)" class="p-1 hover:text-white"><i class="fa-solid fa-chevron-up"></i></button>
+                                <button onclick="app.moveSegment(${i}, 1)" class="p-1 hover:text-white"><i class="fa-solid fa-chevron-down"></i></button>
+                            </div>
+                            <span class="font-bold text-blue-300">Target/Distance ${i+1}</span>
+                            <button onclick="app.removeCustomSegment(${i})" class="text-red-400 hover:text-red-300"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <input type="text" value="${seg.name}" onchange="app.updateSegment(${i}, 'name', this.value)" class="bg-slate-900 border border-slate-600 rounded p-1 text-white" placeholder="Target/Distance">
+                            <select onchange="app.updateSegment(${i}, 'scoringType', this.value)" class="bg-slate-900 border border-slate-600 rounded p-1 text-white">
+                                <option value="" disabled ${!seg.scoringType ? 'selected' : ''}>Choose Scoring Rules</option>
+                                <option value="ibo" ${seg.scoringType === 'ibo' ? 'selected' : ''}>IBO 3D (11-10-8-5-0)</option>
+                                <option value="asa" ${seg.scoringType === 'asa' ? 'selected' : ''}>ASA 3D (14-12-10-8-5-0)</option>
+                                <option value="nasp" ${seg.scoringType === 'nasp' ? 'selected' : ''}>NASP 3D (10-9-8-7-0)</option>
+                                <option value="full_11" ${seg.scoringType === 'full_11' ? 'selected' : ''}>11 - 0 (Sequential)</option>
+                                <option value="vegas_300" ${seg.scoringType === 'vegas_300' ? 'selected' : ''}>10 - 0</option>
+                                <option value="nfaa_360" ${seg.scoringType === 'nfaa_360' ? 'selected' : ''}>6 - 0</option>
+                                <option value="nfaa_300" ${seg.scoringType === 'nfaa_300' ? 'selected' : ''}>5 - 0</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><label class="text-xs text-slate-400">Total Ends</label><input type="number" value="${seg.ends}" placeholder="--" onchange="app.updateSegment(${i}, 'ends', parseInt(this.value))" class="w-full bg-slate-900 border border-slate-600 rounded p-1 text-white"></div>
+                            <div><label class="text-xs text-slate-400">Arr/End</label><input type="number" value="${seg.arrowsPerEnd}" placeholder="--" onchange="app.updateSegment(${i}, 'arrowsPerEnd', parseInt(this.value))" class="w-full bg-slate-900 border border-slate-600 rounded p-1 text-white"></div>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-slate-600/50 flex gap-2 items-center">
+                            <span class="text-xs text-slate-400">X =</span>
+                            <select onchange="app.updateSegment(${i}, 'xValue', parseInt(this.value))" class="w-20 bg-slate-900 border border-slate-600 rounded p-1 text-white">
+                                <option value="" disabled ${!seg.xValue ? 'selected' : ''}>--</option>
+                                <option value="14" ${seg.xValue === 14 ? 'selected' : ''}>14</option>
+                                <option value="11" ${seg.xValue === 11 ? 'selected' : ''}>11</option>
+                                <option value="10" ${seg.xValue === 10 ? 'selected' : ''}>10</option>
+                                <option value="6" ${seg.xValue === 6 ? 'selected' : ''}>6</option>
+                                <option value="5" ${seg.xValue === 5 ? 'selected' : ''}>5</option>
+                            </select>
+                            <span class="text-xs text-slate-500 ml-auto">Total Arrows: ${(seg.ends && seg.arrowsPerEnd) ? (seg.ends * seg.arrowsPerEnd) : '--'}</span>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            addShooter() {
+                const nameInput = document.getElementById('new-shooter-name');
+                const name = this.formatName(nameInput.value.trim());
+                const type = document.getElementById('round-type').value;
+
+                if (!type) return this.showAlert("Please select a Round Type first.");
+
+                if (type === 'custom') {
+                    const emptySeg = this.customSegments.find(s => !s.scoringType || !s.ends || !s.arrowsPerEnd);
+                    if (emptySeg) {
+                        return this.showAlert(`Please configure "${emptySeg.name}" or delete it before adding shooters.`);
+                    }
+                }
+
+                if (!name) return this.showAlert("Please enter a name");
+
+                this.data.shooters.push({ id: Date.now(), name, scores: [] });
+                nameInput.value = '';
+                
+                this.renderShooterList();
+                
+                const startBtn = document.getElementById('start-btn');
+                if(startBtn) startBtn.focus();
+            },
+            
+            moveShooter(idx, dir) {
+                if (idx + dir < 0 || idx + dir >= this.data.shooters.length) return;
+                const temp = this.data.shooters[idx]; this.data.shooters[idx] = this.data.shooters[idx+dir]; this.data.shooters[idx+dir] = temp;
+                if (this.data.active) {
+                    const endIdx = this.data.currentEnd - 1;
+                    const anyScoresEntered = this.data.shooters.some(s => s.scores[endIdx] && s.scores[endIdx].length > 0);
+
+                    if (!anyScoresEntered) {
+                        this.data.currentShooterIndex = 0;
+                    } else {
+                        if (this.data.currentShooterIndex === idx) this.data.currentShooterIndex += dir;
+                        else if (this.data.currentShooterIndex === idx + dir) this.data.currentShooterIndex -= dir;
+                    }
+                    this.renderScoringUI(); this.renderReorderList(); 
+                } else { this.renderShooterList(); }
+            },
+            openReorderModal() { this.renderReorderList(); document.getElementById('reorder-modal').classList.remove('hidden'); },
+            closeReorderModal() { document.getElementById('reorder-modal').classList.add('hidden'); },
+            renderReorderList() {
+                const list = document.getElementById('reorder-list');
+                list.innerHTML = this.data.shooters.map((s, i) => `
+                    <div class="flex items-center justify-between bg-slate-700 p-3 rounded-lg border border-slate-600">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-white">${s.name}</span>
+                            <button onclick="app.openEditProfile(${i}); app.closeReorderModal();" class="text-xs bg-slate-600 hover:bg-slate-500 text-slate-300 px-2 py-1 rounded"><i class="fa-solid fa-pen"></i> Edit</button>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="app.moveShooter(${i}, -1)" class="p-2 bg-slate-600 rounded hover:bg-slate-500"><i class="fa-solid fa-chevron-up"></i></button>
+                            <button onclick="app.moveShooter(${i}, 1)" class="p-2 bg-slate-600 rounded hover:bg-slate-500"><i class="fa-solid fa-chevron-down"></i></button>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            openEditProfile(index) {
+                this.editingProfileIndex = index;
+                const shooter = this.data.shooters[index];
+                document.getElementById('edit-profile-name').value = shooter.name;
+                document.getElementById('edit-profile-modal').classList.remove('hidden');
+            },
+            saveProfile() {
+                const idx = this.editingProfileIndex;
+                const name = this.formatName(document.getElementById('edit-profile-name').value.trim());
+                if (!name) return this.showAlert("Name required");
+                
+                this.data.shooters[idx].name = name;
+                this.save();
+                this.closeEditProfile();
+                this.renderShooterList();
+                this.renderScoringUI();
+                try {
+                     if (!document.getElementById('scorecard-modal').classList.contains('hidden')) {
+                         const modalTabs = document.getElementById('modal-shooter-tabs');
+                         if (modalTabs) {
+                            modalTabs.innerHTML = this.data.shooters.map((s, i) => `
+                                <button onclick="app.renderScoreCardTable(${i})" class="modal-tab-btn px-4 py-2 mr-2 rounded-full text-xs font-bold border ${i === idx ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-600 bg-slate-700 text-slate-300'}">${s.name}</button>
+                            `).join('');
+                         }
+                         this.renderScoreCardTable(idx);
+                     }
+                } catch(e) {}
+            },
+            closeEditProfile() { document.getElementById('edit-profile-modal').classList.add('hidden'); },
+            removeShooter(index) { this.data.shooters.splice(index, 1); this.renderShooterList(); },
+            renderShooterList() {
+                const list = document.getElementById('shooter-list');
+                list.innerHTML = this.data.shooters.map((s, i) => `
+                    <div class="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700 animate-pop">
+                        <div class="flex-1 min-w-0 mr-2"><div class="font-bold text-sm truncate">${s.name}</div></div>
+                        <div class="flex gap-1">
+                            <button onclick="app.moveShooter(${i}, -1)" class="text-slate-400 hover:text-white p-2 shrink-0"><i class="fa-solid fa-chevron-up"></i></button>
+                            <button onclick="app.moveShooter(${i}, 1)" class="text-slate-400 hover:text-white p-2 shrink-0"><i class="fa-solid fa-chevron-down"></i></button>
+                            <button onclick="app.openEditProfile(${i})" class="text-slate-400 hover:text-white p-2 shrink-0"><i class="fa-solid fa-pen-to-square"></i></button>
+                            <button onclick="app.removeShooter(${i})" class="text-red-400 hover:text-red-300 p-2 shrink-0"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            confirmReset() { this.showConfirm("Reset current round? Data will be lost.", (yes) => { if (yes) { localStorage.removeItem('archeryState_v52'); location.reload(); } }); },
+
+            startRound() {
+                if (this.data.shooters.length === 0) return this.showAlert("Add a shooter first.");
+                const type = document.getElementById('round-type').value;
+                if (!type) return this.showAlert("Please select a Round Type.");
+
+                this.data.roundType = type;
+                if (type === 'custom') {
+                    if (this.customSegments.length === 0) return this.showAlert("Add at least one target/distance.");
+                    let totalEnds = 0;
+                    for(let seg of this.customSegments) {
+                        if (!seg.scoringType || !seg.xValue || !seg.ends || !seg.arrowsPerEnd) return this.showAlert(`Incomplete details for "${seg.name}".`);
+                        if (!Number.isInteger(seg.ends)) return this.showAlert(`Error in "${seg.name}": Ends must be a whole number.`);
+                        totalEnds += seg.ends;
+                    }
+                    this.data.customRound = { segments: JSON.parse(JSON.stringify(this.customSegments)) };
+                    this.data.targetCount = totalEnds;
+                } else {
+                    const config = this.configs[type];
+                    this.data.arrowsPerEnd = config.arrows;
+                    this.data.targetCount = ['ibo', 'asa'].includes(type) ? (parseInt(document.getElementById('target-count').value) || 30) : config.ends;
+                }
+                this.data.shooters.forEach(s => s.scores = Array(this.data.targetCount).fill(null).map(() => []));
+                this.data.currentEnd = 1;
+                this.data.currentShooterIndex = 0;
+                this.data.active = true;
+                this.save();
+                this.showScreen('scoring');
+                this.renderScoringUI();
+            },
+
+            getSegmentForEnd(endNum) {
+                if (this.data.roundType !== 'custom') return null;
+                let endsAccum = 0;
+                for (let seg of this.data.customRound.segments) {
+                    if (endNum <= endsAccum + seg.ends) {
+                        return {
+                            name: seg.name,
+                            arrows: seg.arrowsPerEnd,
+                            config: this.generateCustomConfig(seg),
+                            segEnds: seg.ends,
+                            currentSegEnd: endNum - endsAccum,
+                            scoringType: seg.scoringType,
+                            xValue: seg.xValue
+                        };
+                    }
+                    endsAccum += seg.ends;
+                }
+                return null;
+            },
+
+            generateCustomConfig(seg) {
+                let base = JSON.parse(JSON.stringify(this.configs[seg.scoringType]));
+                if (base.keys && base.keys.length > 0) {
+                    const xLabel = seg.xValue.toString();
+                    if(seg.xValue === 14 || seg.xValue === 11 || seg.xValue === 6) {
+                        base.keys[0].label = xLabel;
+                        base.keys[0].display = xLabel;
+                    } else {
+                        base.keys[0].label = "X";
+                        base.keys[0].display = "X";
+                    }
+                    base.keys[0].value = seg.xValue;
+                }
+                base.arrows = seg.arrowsPerEnd;
+                return base;
+            },
+
+            checkAllShootersComplete(endIdx, limit) {
+                 return this.data.shooters.every(s => (s.scores[endIdx] || []).length >= limit);
+            },
+            
+            checkForInterruption() {
+                if (this.data.currentEnd === this.data.targetCount) return null; 
+
+                if (this.data.roundType === 'custom') {
+                    let accum = 0;
+                    for (let i = 0; i < this.data.customRound.segments.length; i++) {
+                        accum += this.data.customRound.segments[i].ends;
+                        if (this.data.currentEnd === accum) {
+                            const roundNum = i + 1;
+                            const ordinal = (n) => n + (n > 0 ? ['th', 'st', 'nd', 'rd'][(n > 3 && n < 21) || n % 10 > 3 ? 0 : n % 10] : '');
+                            const nextSeg = this.data.customRound.segments[i+1];
+                            let msg = `<span class='text-xl font-bold'>${ordinal(roundNum)} Round Complete</span>`;
+                            if(nextSeg) msg += `<br><br>Next: ${nextSeg.name}<br><span class="text-sm text-slate-400">Change Target/Distance</span>`;
+                            return msg;
+                        }
+                    }
+                } else if (!['ibo', 'asa', 'nasp'].includes(this.data.roundType)) {
+                    const halfEnds = Math.floor(this.data.targetCount / 2);
+                    if (this.data.currentEnd === halfEnds) {
+                        return "<span class='text-3xl font-bold leading-relaxed'>Halfway - Switch Targets</span>";
+                    }
+                }
+                return null;
+            },
+
+            advanceEnd() {
+                 if (this.data.currentEnd < this.data.targetCount) {
+                    this.data.currentEnd++;
+                    this.data.currentShooterIndex = 0;
+                    this.save();
+                    this.renderScoringUI();
+                 } else {
+                    this.viewScoreCards();
+                 }
+            },
+
+            renderScoringUI() {
+                if (this.data.currentShooterIndex >= this.data.shooters.length) {
+                    this.data.currentShooterIndex = 0;
+                }
+
+                let config;
+                let arrowsCount;
+                let segmentName = "";
+                let segProgress = "";
+
+                if (this.data.roundType === 'custom') {
+                    const segInfo = this.getSegmentForEnd(this.data.currentEnd);
+                    if (segInfo) {
+                        config = segInfo.config;
+                        arrowsCount = segInfo.arrows;
+                        segmentName = segInfo.name;
+                        segProgress = ` (${segInfo.currentSegEnd}/${segInfo.segEnds})`;
+                    } else { config = this.configs['ibo']; arrowsCount = 1; }
+                    document.getElementById('segment-info-bar').classList.remove('hidden');
+                    document.getElementById('segment-info-bar').textContent = `${segmentName}${segProgress}`;
+                    document.getElementById('round-info-display').textContent = "Custom";
+                } else {
+                    config = this.configs[this.data.roundType];
+                    arrowsCount = this.data.arrowsPerEnd;
+                    document.getElementById('round-info-display').textContent = config.name;
+                    document.getElementById('segment-info-bar').classList.add('hidden');
+                }
+                this.runtimeArrowsPerEnd = arrowsCount;
+
+                const shooter = this.data.shooters[this.data.currentShooterIndex];
+                document.getElementById('current-end-display').textContent = this.data.currentEnd;
+                document.getElementById('total-ends-display').textContent = this.data.targetCount;
+
+                const tabs = document.getElementById('shooter-tabs');
+                tabs.innerHTML = this.data.shooters.map((s, i) => `
+                    <button onclick="app.switchShooter(${i})" class="${i === this.data.currentShooterIndex ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-700 text-slate-400'} px-4 py-2 rounded-lg mr-2 font-bold text-sm min-w-[100px] transition truncate max-w-[150px]">${s.name}</button>
+                `).join('');
+                setTimeout(() => tabs.children[this.data.currentShooterIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 50);
+
+                const currentScores = shooter.scores[this.data.currentEnd - 1] || [];
+                const endTotal = currentScores.reduce((sum, a) => sum + a.value, 0);
+                
+                let runningTotal = 0; let half1Total = 0; let half2Total = 0;
+                const halfEnds = Math.floor(this.data.targetCount / 2);
+
+                shooter.scores.forEach((endArr, idx) => { 
+                    if (endArr) {
+                        const s = endArr.reduce((s, a) => s + a.value, 0);
+                        runningTotal += s; 
+                        if (idx < halfEnds) half1Total += s; else half2Total += s;
+                    }
+                });
+
+                const endTotalEl = document.getElementById('end-total');
+                const half1El = document.getElementById('half1-total');
+                const half2El = document.getElementById('half2-total');
+                endTotalEl.classList.remove('score-highlight');
+                half1El.classList.remove('score-highlight');
+                half2El.classList.remove('score-highlight');
+
+                endTotalEl.textContent = endTotal;
+                document.getElementById('running-total').textContent = runningTotal;
+                
+                if (!['custom', 'ibo', 'asa', 'nasp'].includes(this.data.roundType)) {
+                    document.getElementById('halves-display').classList.remove('hidden');
+                    half1El.textContent = half1Total;
+                    half2El.textContent = half2Total;
+                } else { document.getElementById('halves-display').classList.add('hidden'); }
+
+                const isEndComplete = currentScores.length === arrowsCount;
+                if (isEndComplete) {
+                     endTotalEl.classList.add('score-highlight');
+                     if (!['custom', 'ibo', 'asa', 'nasp'].includes(this.data.roundType)) {
+                         if ((this.data.currentEnd - 1) < halfEnds) half1El.classList.add('score-highlight');
+                         else half2El.classList.add('score-highlight');
+                     }
+                }
+
+                const slots = document.getElementById('arrow-slots');
+                let slotsHtml = '';
+                for (let i = 0; i < arrowsCount; i++) {
+                    const arrow = currentScores[i];
+                    slotsHtml += arrow ? `<div class="w-10 h-10 flex items-center justify-center rounded-full text-sm font-bold shadow-inner ${arrow.color} animate-pop border border-slate-700">${arrow.display || arrow.value}</div>` : `<div class="w-10 h-10 rounded-full border border-dashed border-slate-600 bg-slate-800/50"></div>`;
+                }
+                slots.innerHTML = slotsHtml;
+
+                const keypad = document.getElementById('keypad');
+                // Removed fractional stretch, updated to fixed heights h-20 (80px) and h-24 (96px) with bumped text size
+                keypad.className = `grid gap-2 sm:gap-3 p-1 grid-cols-${config.cols || 3}`;
+                keypad.innerHTML = config.keys.map(k => `
+                    <button onclick='app.addScore(${JSON.stringify(k)})' class="btn-raised ${k.color} ${k.span || ''} h-20 sm:h-24 rounded-xl sm:rounded-2xl text-2xl sm:text-3xl font-black shadow-lg flex items-center justify-center relative overflow-hidden active:scale-95 transition-transform duration-75">${k.label}</button>
+                `).join('');
+            },
+
+            addScore(keyObj) {
+                const shooter = this.data.shooters[this.data.currentShooterIndex];
+                const endIdx = this.data.currentEnd - 1;
+                const arrowsLimit = this.runtimeArrowsPerEnd || this.data.arrowsPerEnd;
+
+                if (this.autoAdvanceTimer) {
+                     clearTimeout(this.autoAdvanceTimer);
+                     this.autoAdvanceTimer = null;
+                     this.hideToast();
+                }
+
+                if (!shooter.scores[endIdx]) shooter.scores[endIdx] = [];
+                
+                if (shooter.scores[endIdx].length < arrowsLimit) {
+                    shooter.scores[endIdx].push({ value: keyObj.value, display: keyObj.display || keyObj.label, color: keyObj.color });
+                    this.save();
+                    this.renderScoringUI();
+
+                    const allComplete = this.checkAllShootersComplete(endIdx, arrowsLimit);
+                    
+                    if (allComplete) {
+                        if (this.data.currentEnd === this.data.targetCount) {
+                             this.roundCompleteTimer = setTimeout(() => {
+                                this.roundCompleteTimer = null;
+                                this.showAlert("Round Complete!", () => { this.viewScoreCards(); });
+                            }, 2000);
+                             return;
+                        }
+
+                        const interruptionMsg = this.checkForInterruption();
+
+                        if (interruptionMsg) {
+                            this.transitionTimer = setTimeout(() => {
+                                this.transitionTimer = null;
+                                this.showAlert(interruptionMsg, () => { this.advanceEnd(); });
+                                setTimeout(() => { this.closeNotification(); }, 4000);
+                            }, 1000); 
+                        } else {
+                            this.showToast(`End ${this.data.currentEnd} Complete.<br>Advancing...`);
+                            this.autoAdvanceTimer = setTimeout(() => {
+                                this.autoAdvanceTimer = null;
+                                this.hideToast();
+                                this.advanceEnd();
+                            }, 4000); 
+                        }
+                    } 
+                }
+            },
+
+            undoLastArrow() {
+                if (this.autoAdvanceTimer) { clearTimeout(this.autoAdvanceTimer); this.autoAdvanceTimer = null; }
+                if (this.transitionTimer) { clearTimeout(this.transitionTimer); this.transitionTimer = null; }
+                if (this.roundCompleteTimer) { clearTimeout(this.roundCompleteTimer); this.roundCompleteTimer = null; }
+                this.hideToast();
+                this.closeNotification(); 
+
+                const shooter = this.data.shooters[this.data.currentShooterIndex];
+                const endIdx = this.data.currentEnd - 1;
+                if (shooter.scores[endIdx] && shooter.scores[endIdx].length > 0) {
+                    shooter.scores[endIdx].pop();
+                    this.save();
+                    this.renderScoringUI();
+                }
+            },
+
+            switchShooter(index) {
+                this.data.currentShooterIndex = index;
+                this.renderScoringUI();
+            },
+
+            nextShooterOrEnd() {
+                if (this.isTransitioning) return;
+                
+                if (this.transitionTimer) { clearTimeout(this.transitionTimer); this.transitionTimer = null; }
+                if (this.autoAdvanceTimer) { clearTimeout(this.autoAdvanceTimer); this.autoAdvanceTimer = null; this.hideToast(); }
+                if (this.roundCompleteTimer) { clearTimeout(this.roundCompleteTimer); this.roundCompleteTimer = null; this.showAlert("Round Complete!", () => { this.viewScoreCards(); }); return; }
+
+                const endIdx = this.data.currentEnd - 1;
+                const arrowsLimit = this.runtimeArrowsPerEnd || this.data.arrowsPerEnd;
+                
+                const currentShooter = this.data.shooters[this.data.currentShooterIndex];
+                const currentScoreCount = currentShooter.scores[endIdx].length;
+
+                if (currentScoreCount > 0 && currentScoreCount < arrowsLimit) return this.showAlert("Finish shooting this end first.");
+                
+                this.isTransitioning = true;
+                setTimeout(() => { this.isTransitioning = false; }, 200);
+
+                const allComplete = this.checkAllShootersComplete(endIdx, arrowsLimit);
+
+                if (allComplete) {
+                     const interruptionMsg = this.checkForInterruption();
+                     if (interruptionMsg) {
+                         this.showAlert(interruptionMsg, () => { this.advanceEnd(); });
+                         setTimeout(() => { this.closeNotification(); }, 4000);
+                     } else {
+                         this.advanceEnd();
+                     }
+                } else {
+                    let foundIndex = -1;
+                    for (let i = 1; i < this.data.shooters.length; i++) {
+                        const checkIdx = (this.data.currentShooterIndex + i) % this.data.shooters.length;
+                        if ((this.data.shooters[checkIdx].scores[endIdx] || []).length < arrowsLimit) {
+                            foundIndex = checkIdx;
+                            break;
+                        }
+                    }
+                    
+                    if (foundIndex !== -1) {
+                        this.data.currentShooterIndex = foundIndex;
+                        this.renderScoringUI();
+                    } else {
+                        if (currentScoreCount < arrowsLimit) {
+                            return this.showAlert("Finish shooting this end first.");
+                        }
+                        this.advanceEnd(); 
+                    }
+                }
+                this.save();
+                this.renderScoringUI();
+            },
+
+            viewScoreCards() {
+                if (!this.data.active) {
+                    this.showAlert("Please start a round to view the scorecard.");
+                    return;
+                }
+                
+                try {
+                    const modalTabs = document.getElementById('modal-shooter-tabs');
+                    if (!this.data.shooters || this.data.shooters.length === 0) {
+                        this.showAlert("No shooters found.");
+                        return;
+                    }
+
+                    modalTabs.innerHTML = this.data.shooters.map((s, i) => `
+                        <button onclick="app.renderScoreCardTable(${i})" class="modal-tab-btn px-4 py-2 mr-2 rounded-full text-xs font-bold border ${i === this.data.currentShooterIndex ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-600 bg-slate-700 text-slate-300'}">${s.name}</button>
+                    `).join('');
+                    
+                    this.renderScoreCardTable(this.data.currentShooterIndex);
+                    document.getElementById('scorecard-modal').classList.remove('hidden');
+                } catch (e) {
+                    console.error(e);
+                    this.showAlert("Error opening scorecard: " + e.message);
+                }
+            },
+
+            openTextExportModal() {
+                document.getElementById('text-export-modal').classList.remove('hidden');
+            },
+
+            closeTextExportModal() {
+                document.getElementById('text-export-modal').classList.add('hidden');
+            },
+
+            async shareScorecardImage() {
+                try {
+                    this.showToast("Generating Image...");
+                    
+                    const originalNode = document.querySelector('#scorecard-modal .modal-content');
+                    if (!originalNode) throw new Error("Scorecard not found");
+
+                    const shooterName = this.data.shooters[this.data.currentShooterIndex].name;
+                    const type = this.data.roundType;
+                    const roundName = type === 'custom' ? "Custom Round" : (this.configs[type] ? this.configs[type].name : "Archery Round");
+                    
+                    const clone = originalNode.cloneNode(true);
+                    
+                    Object.assign(clone.style, {
+                        position: 'fixed', left: '0', top: '0', width: '600px', height: 'auto',
+                        maxHeight: 'none', overflow: 'visible', borderRadius: '0', transform: 'none', zIndex: '-1'
+                    });
+                    
+                    const bodyContent = clone.querySelector('.flex-1');
+                    if(bodyContent) bodyContent.style.overflow = 'visible';
+                    
+                    const footer = clone.querySelector('.export-footer');
+                    if(footer) footer.remove();
+                    
+                    const tabs = clone.querySelector('#modal-shooter-tabs');
+                    if(tabs) tabs.remove();
+                    
+                    const header = clone.querySelector('.p-3.border-b');
+                    if(header) {
+                        header.innerHTML = `
+                            <div class="w-full text-center py-2">
+                                <h2 class="text-2xl font-bold text-emerald-400">ArcheryKeeper</h2>
+                                <div class="text-white text-xl font-bold mt-1">${shooterName}</div>
+                                <div class="text-emerald-300 text-sm font-bold">${roundName}</div>
+                                <div class="text-slate-400 text-xs mt-1">${new Date().toLocaleDateString()}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    const tableContainer = clone.querySelector('.overflow-y-auto');
+                    if(tableContainer) {
+                        tableContainer.classList.remove('overflow-y-auto');
+                        tableContainer.style.overflow = 'visible';
+                    }
+
+                    document.body.appendChild(clone);
+                    await new Promise(resolve => setTimeout(resolve, 150));
+
+                    const canvas = await html2canvas(clone, {
+                        backgroundColor: '#0f172a', 
+                        scale: 2, useCORS: true, logging: false
+                    });
+                    
+                    document.body.removeChild(clone);
+
+                    if (canvas.width === 0 || canvas.height === 0) throw new Error("Canvas generation failed (empty).");
+
+                    this.generatedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                    
+                    const modal = document.getElementById('image-preview-modal');
+                    const img = document.getElementById('preview-img-tag');
+                    img.src = canvas.toDataURL("image/png");
+                    
+                    modal.classList.remove('hidden');
+                    this.hideToast();
+
+                } catch (e) {
+                    console.error(e);
+                    this.showAlert("Could not generate image: " + e.message);
+                }
+            },
+            
+            closeImagePreview() {
+                document.getElementById('image-preview-modal').classList.add('hidden');
+            },
+            
+            async copyImageToClipboard() {
+                if (!this.generatedBlob) return;
+                try {
+                    const item = new ClipboardItem({ 'image/png': this.generatedBlob });
+                    await navigator.clipboard.write([item]);
+                    this.showToast("Image Copied to Clipboard!");
+                    this.closeImagePreview();
+                } catch (err) {
+                    console.error(err);
+                    this.showAlert("Failed to copy image. Browser might not support this.");
+                }
+            },
+            
+            downloadImageLocal() {
+                if (!this.generatedBlob) return;
+                const url = URL.createObjectURL(this.generatedBlob);
+                const link = document.createElement('a');
+                link.download = `Archery_Scorecard.png`;
+                link.href = url;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 100);
+                this.closeImagePreview();
+            },
+            
+            async nativeShareImage() {
+                if (!this.generatedBlob) return this.showAlert("Image not ready.");
+                
+                const file = new File([this.generatedBlob], "Archery_Scorecard.png", { 
+                    type: 'image/png',
+                    lastModified: new Date().getTime() 
+                });
+                
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            title: 'Archery Scorecard',
+                            text: 'Here is my latest archery round scorecard!',
+                            files: [file]
+                        });
+                        this.closeImagePreview();
+                    } catch (err) {
+                        console.log("Share cancelled", err);
+                    }
+                } else {
+                    this.showAlert("Direct sharing isn't supported on this device/browser. Please use Copy or Save instead.");
+                }
+            },
+
+            async nativeShareText() {
+                const csv = this.generateCSV();
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: 'Archery Scorecard',
+                            text: csv
+                        });
+                        this.closeTextExportModal();
+                    } catch (err) {
+                        console.log("Share cancelled", err);
+                    }
+                } else {
+                    this.showAlert("Direct sharing isn't supported on this device/browser. Please use Copy or Save instead.");
+                }
+            },
+
+            sortArrows(a, b) {
+                if (a.value !== b.value) return b.value - a.value;
+                if (a.display === 'X' && b.display !== 'X') return -1;
+                if (b.display === 'X' && a.display !== 'X') return 1;
+                return 0;
+            },
+
+            renderScoreCardTable(shooterIdx) {
+                if (!this.data.shooters || !this.data.shooters[shooterIdx]) {
+                    console.error("Shooter index out of bounds or data missing");
+                    return;
+                }
+
+                try {
+                    const shooter = this.data.shooters[shooterIdx];
+                    const tbody = document.getElementById('scorecard-body');
+                    const thead = document.getElementById('scorecard-head');
+                    const headerInfo = document.getElementById('scorecard-header-info');
+                    const type = this.data.roundType;
+                    
+                    headerInfo.innerHTML = `<div><div class="font-bold text-sm text-emerald-400">${shooter.name}</div></div><button onclick="app.openEditProfile(${shooterIdx})" class="p-2 text-slate-400 hover:text-white shrink-0"><i class="fa-solid fa-pen-to-square"></i></button>`;
+
+                    let stat1Label = "X", stat2Label = "", hasStat2 = false;
+
+                    if (type === 'vegas_330' || type === 'vegas_495' || type === 'vegas_660') { stat1Label = "11"; stat2Label = "10"; hasStat2 = true; }
+                    else if (type === 'nfaa_360') { stat1Label = "6"; stat2Label = "5"; hasStat2 = true; }
+                    else if (type === 'ibo') { stat1Label = "11"; hasStat2 = false; }
+                    else if (type === 'asa') { stat1Label = "14"; stat2Label = "12"; hasStat2 = true; }
+                    else if (type === 'nasp') { stat1Label = "10"; hasStat2 = false; }
+                    else if (type.includes('vegas')) { stat1Label = "X"; stat2Label = "10"; hasStat2 = true; }
+                    else if (type.includes('nfaa')) { stat1Label = "X"; stat2Label = "5"; hasStat2 = true; }
+                    else if (type === 'custom') { 
+                        if(this.data.customRound && this.data.customRound.segments && this.data.customRound.segments.length > 0) {
+                            const seg = this.data.customRound.segments[0];
+                            stat1Label = seg.xValue.toString();
+                            if(seg.xValue === 10 || seg.xValue === 5) stat1Label = "X"; 
+                            
+                            if (seg.scoringType !== 'ibo' && seg.scoringType !== 'nasp') {
+                                hasStat2 = true;
+                                if (seg.scoringType.includes('vegas') || seg.scoringType === 'full_11') stat2Label = "10";
+                                else if (seg.scoringType.includes('nfaa')) stat2Label = "5";
+                                else if (seg.scoringType === 'asa') stat2Label = "12";
+                            } else { hasStat2 = false; }
+                        }
+                    }
+
+                    let headerHtml = `<tr class="text-slate-400 text-xs uppercase bg-slate-800 sticky top-0 z-10 shadow-sm"><th class="p-2">End</th><th class="p-2">Arrows</th><th class="p-2">Score</th><th class="p-2">${stat1Label}</th>${hasStat2 ? `<th class="p-2">${stat2Label}</th>` : ''}<th class="p-2">Run</th></tr>`;
+                    thead.innerHTML = headerHtml;
+
+                    let runningTotal = 0, half1Total = 0, half2Total = 0, grandStat1 = 0, grandStat2 = 0, html = '';
+                    const halfEnds = Math.floor(this.data.targetCount / 2);
+                    const colSpan = hasStat2 ? 6 : 5;
+                    const docButtons = document.querySelectorAll('.modal-tab-btn');
+                    if(docButtons) docButtons.forEach((btn, i) => { if(i===shooterIdx) btn.className = "modal-tab-btn px-4 py-2 mr-2 rounded-full text-xs font-bold border border-emerald-500 bg-emerald-600 text-white"; else btn.className = "modal-tab-btn px-4 py-2 mr-2 rounded-full text-xs font-bold border border-slate-600 bg-slate-700 text-slate-300"; });
+
+                    for (let i = 0; i < this.data.targetCount; i++) {
+                        const arrows = shooter.scores[i] || [];
+                        const endSum = arrows.reduce((a, b) => a + b.value, 0);
+                        let endStat1 = 0, endStat2 = 0;
+                        
+                        let segArrows = this.data.arrowsPerEnd;
+                        if(type==='custom') { const seg = this.getSegmentForEnd(i+1); if(seg) segArrows = seg.arrows; }
+
+                        if (arrows.length > 0) {
+                            runningTotal += endSum;
+                            if (i < halfEnds) half1Total += endSum; else half2Total += endSum;
+                            
+                            arrows.forEach(a => {
+                                const val = a.value; const disp = a.display;
+                                if (type === 'vegas_330' || type === 'vegas_495' || type === 'vegas_660') { if (val === 11) endStat1++; else if (val === 10) endStat2++; } 
+                                else if (type === 'nfaa_360') { if (val === 6) endStat1++; else if (val === 5) endStat2++; } 
+                                else if (type === 'ibo') { if (val === 11) endStat1++; }
+                                else if (type === 'asa') { if (val === 14) endStat1++; else if (val === 12) endStat2++; }
+                                else if (type === 'nasp') { if (val === 10) endStat1++; }
+                                else if (type === 'custom') { 
+                                    const seg = this.getSegmentForEnd(i+1);
+                                    if(seg) {
+                                        if(val === seg.xValue || disp === 'X') endStat1++;
+                                        if(seg.scoringType !== 'ibo' && seg.scoringType !== 'nasp') {
+                                             if((seg.scoringType.includes('vegas') || seg.scoringType === 'full_11') && val===10 && disp!=='X') endStat2++;
+                                             else if(seg.scoringType.includes('nfaa') && val===5 && disp!=='X') endStat2++;
+                                             else if(seg.scoringType === 'full_11' && val===10) endStat2++;
+                                             else if(seg.scoringType === 'asa' && val===12) endStat2++;
+                                        }
+                                    }
+                                }
+                                else if (type.includes('vegas')) { if (disp === 'X') endStat1++; else if (val === 10) endStat2++; }
+                                else if (type.includes('nfaa')) { if (disp === 'X') endStat1++; else if (val === 5) endStat2++; }
+                            });
+                            grandStat1 += endStat1; grandStat2 += endStat2;
+                        }
+                        
+                        const sortedArrows = [...arrows].sort(this.sortArrows);
+                        let arrowCells = '';
+                        for (let j = 0; j < segArrows; j++) {
+                            if (sortedArrows[j]) {
+                                const originalIdx = arrows.indexOf(sortedArrows[j]);
+                                arrowCells += `<span onclick="app.openEditModal(${shooterIdx}, ${i}, ${originalIdx})" class="inline-block w-6 h-6 leading-6 text-center rounded-full ${sortedArrows[j].color} text-[10px] font-bold mx-0.5 shadow-sm border border-black/20">${sortedArrows[j].display || sortedArrows[j].value}</span>`;
+                            } else {
+                                arrowCells += `<span class="inline-block w-6 h-6 leading-6 text-center rounded-full bg-slate-900 text-slate-600 text-[10px] mx-0.5">-</span>`;
+                            }
+                        }
+                        html += `<tr class="border-b border-slate-700 ${i % 2 === 0 ? 'bg-slate-800' : 'bg-slate-800/50'}"><td class="p-2 text-slate-400 font-mono">${i + 1}</td><td class="p-2 whitespace-nowrap">${arrowCells}</td><td class="p-2 text-emerald-400 font-bold">${arrows.length ? endSum : '-'}</td><td class="p-2 text-xs font-bold text-slate-300">${endStat1 || '-'}</td>${hasStat2 ? `<td class="p-2 text-xs font-bold text-slate-300">${endStat2 || '-'}</td>` : ''}<td class="p-2 font-bold">${arrows.length ? runningTotal : '-'}</td></tr>`;
+                        if (i === halfEnds - 1 && !['custom', 'ibo', 'asa', 'nasp'].includes(type)) { html += `<tr class="bg-slate-700 border-y-2 border-slate-600"><td colspan="2" class="p-2 text-right text-slate-300 text-xs font-bold uppercase">1st Half Total</td><td colspan="${colSpan-2}" class="p-2 text-lg font-bold text-white text-right">${half1Total}</td></tr>`; }
+                    }
+                    
+                    if(!['custom', 'ibo', 'asa', 'nasp'].includes(type)) html += `<tr class="bg-slate-700 border-b border-slate-600"><td colspan="2" class="p-2 text-right text-slate-300 text-xs font-bold uppercase">2nd Half Total</td><td colspan="${colSpan-2}" class="p-2 text-lg font-bold text-white text-right">${half2Total}</td></tr>`;
+                    let footerStats = hasStat2 ? `${stat1Label}s: ${grandStat1} | ${stat2Label}s: ${grandStat2}` : `${stat1Label}s: ${grandStat1}`;
+                    html += `<tr class="bg-slate-900 border-t-2 border-emerald-600"><td colspan="3" class="p-3 text-left pl-4"><span class="text-slate-400 text-xs font-bold uppercase mr-2">Stats</span><span class="text-md font-bold text-white">${footerStats}</span></td><td colspan="${colSpan-3}" class="p-3 text-right"><span class="text-emerald-500 text-xs font-bold uppercase mr-2">Total</span><span class="text-2xl font-black text-white">${runningTotal}</span></td></tr>`;
+                    tbody.innerHTML = html;
+                } catch(e) {
+                    console.error("Scorecard render error:", e);
+                    this.showAlert("Error rendering scorecard. Data may be incomplete.");
+                }
+            },
+
+            closeScoreCard() { document.getElementById('scorecard-modal').classList.add('hidden'); },
+
+            openEditModal(shooterIdx, endIdx, arrowIdx) {
+                this.editingCtx = { shooterIdx, endIdx, currentArrowIdx: arrowIdx, tempScores: [] };
+                const shooter = this.data.shooters[shooterIdx];
+                const existing = shooter.scores[endIdx] || [];
+                let limit = this.data.arrowsPerEnd;
+                let config = this.configs[this.data.roundType];
+                if(this.data.roundType === 'custom') { const seg = this.getSegmentForEnd(endIdx+1); limit = seg.arrows; config = seg.config; }
+                this.editingCtx.tempScores = Array.from({length: limit}, (_, i) => existing[i] || null);
+                const contextDiv = document.getElementById('edit-score-context-header');
+                contextDiv.innerHTML = `${shooter.name} - End ${endIdx + 1}`;
+                this.renderEditArrowsRow();
+                
+                const editKeypad = document.getElementById('edit-keypad');
+                // Increased edit keypad sizes too (h-16 / 64px and h-20 / 80px)
+                editKeypad.className = `grid gap-2 p-1 grid-cols-${config.cols || 3}`;
+                editKeypad.innerHTML = config.keys.map(k => `<button onclick='app.applyEdit(${JSON.stringify(k)})' class="btn-raised ${k.color} h-16 sm:h-20 rounded-xl text-xl font-bold shadow-md">${k.label}</button>`).join('');
+                document.getElementById('edit-score-modal').classList.remove('hidden');
+            },
+
+            renderEditArrowsRow() {
+                const container = document.getElementById('edit-arrows-row');
+                const { tempScores, currentArrowIdx } = this.editingCtx;
+                container.innerHTML = tempScores.map((arrow, i) => {
+                    const isSelected = i === currentArrowIdx;
+                    const style = isSelected ? 'border-2 border-emerald-500 ring-2 ring-emerald-500/30 scale-110' : 'border border-slate-600 opacity-70';
+                    const display = arrow ? (arrow.display || arrow.value) : '-';
+                    const color = arrow ? arrow.color : 'bg-slate-800';
+                    return `<div onclick="app.selectEditArrow(${i})" class="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg cursor-pointer transition-all ${color} ${style}">${display}</div>`;
+                }).join('');
+            },
+
+            selectEditArrow(idx) { this.editingCtx.currentArrowIdx = idx; this.renderEditArrowsRow(); },
+
+            applyEdit(keyObj) {
+                const { currentArrowIdx, tempScores } = this.editingCtx;
+                tempScores[currentArrowIdx] = { value: keyObj.value, display: keyObj.display || keyObj.label, color: keyObj.color };
+                if (currentArrowIdx < tempScores.length - 1) this.editingCtx.currentArrowIdx++;
+                this.renderEditArrowsRow();
+            },
+
+            saveEdits() {
+                const { shooterIdx, endIdx, tempScores } = this.editingCtx;
+                const finalScores = tempScores.filter(a => a !== null);
+                this.data.shooters[shooterIdx].scores[endIdx] = finalScores;
+                this.save();
+                this.closeEditModal();
+                this.renderScoreCardTable(shooterIdx);
+                if ((endIdx + 1) === this.data.currentEnd && shooterIdx === this.data.currentShooterIndex) { this.renderScoringUI(); }
+            },
+
+            closeEditModal() { document.getElementById('edit-score-modal').classList.add('hidden'); },
+
+            generateCSV() {
+                const type = this.data.roundType;
+                let csv = "";
+                let roundName = type === 'custom' ? "Custom Round" : (this.configs[type] ? this.configs[type].name : "Unknown Round");
+                
+                this.data.shooters.forEach((s, shooterIndex) => {
+                    csv += `NAME: ${s.name}\n`;
+                    csv += `ROUND: ${roundName}\n`;
+
+                    let headerSuffix = "";
+                    let arrowColCount = this.data.arrowsPerEnd;
+
+                    if (type === 'custom') {
+                        if(this.data.customRound && this.data.customRound.segments) {
+                             arrowColCount = this.data.customRound.segments.reduce((max, seg) => Math.max(max, seg.arrowsPerEnd), 0);
+                        }
+                        
+                        const seg = this.data.customRound.segments[0];
+                        const label1 = seg.xValue.toString();
+                        let realLabel1 = label1;
+                        if(seg.xValue === 10 || seg.xValue === 5) realLabel1 = "X";
+
+                        if(seg.scoringType !== 'ibo' && seg.scoringType !== 'nasp') {
+                             const label2 = (seg.scoringType.includes('vegas') || seg.scoringType === 'full_11') ? "10s" : (seg.scoringType === 'asa' ? "12s" : "5s");
+                             headerSuffix = `,End ${realLabel1}s,End ${label2}`;
+                        } else {
+                             headerSuffix = `,End ${realLabel1}s`;
+                        }
+                    }
+                    else if (type === 'vegas_330' || type === 'vegas_495' || type === 'vegas_660') headerSuffix = ",End 11s,End 10s";
+                    else if (type === 'nfaa_360') headerSuffix = ",End 6s,End 5s";
+                    else if (type === 'ibo') headerSuffix = ",End 11s";
+                    else if (type === 'asa') headerSuffix = ",End 14s,End 12s";
+                    else if (type === 'nasp') headerSuffix = ",End 10s";
+                    else if (type.includes('vegas')) headerSuffix = ",End Xs,End 10s";
+                    else if (type.includes('nfaa')) headerSuffix = ",End Xs,End 5s";
+                    else headerSuffix = ",End Xs";
+
+                    csv += "End," + Array.from({length: arrowColCount}, (_, i) => `Arrow ${i+1}`).join(',') + ",End Total,Running Total" + headerSuffix + "\n";
+                    
+                    let running = 0;
+                    let countA = 0;
+                    let countB = 0;
+                    
+                    s.scores.forEach((endArrows, idx) => {
+                        const sortedArrows = [...endArrows].sort(this.sortArrows);
+                        const vals = sortedArrows.map(a => a.display || a.value);
+                        while(vals.length < arrowColCount) vals.push(''); 
+                        
+                        const endSum = endArrows.reduce((x, y) => x + y.value, 0);
+                        running += endSum;
+                        
+                        let endStat1 = 0;
+                        let endStat2 = 0;
+
+                        endArrows.forEach(a => {
+                            const val = a.value; const disp = a.display;
+                            if (type === 'vegas_330' || type === 'vegas_495' || type === 'vegas_660') { if (val === 11) endStat1++; else if (val === 10) endStat2++; } 
+                            else if (type === 'nfaa_360') { if (val === 6) endStat1++; else if (val === 5) endStat2++; } 
+                            else if (type === 'ibo') { if (val === 11) endStat1++; }
+                            else if (type === 'asa') { if (val === 14) endStat1++; else if (val === 12) endStat2++; }
+                            else if (type === 'nasp') { if (val === 10) endStat1++; }
+                            else if (type === 'custom') { 
+                                const seg = this.getSegmentForEnd(idx+1);
+                                if(seg) {
+                                    if(val === seg.xValue || disp === 'X') endStat1++;
+                                    if(seg.scoringType !== 'ibo' && seg.scoringType !== 'nasp') {
+                                         if((seg.scoringType.includes('vegas') || seg.scoringType === 'full_11') && val===10 && disp!=='X') endStat2++;
+                                         else if(seg.scoringType.includes('nfaa') && val===5 && disp!=='X') endStat2++;
+                                         else if(seg.scoringType === 'full_11' && val===10) endStat2++;
+                                         else if(seg.scoringType === 'asa' && val===12) endStat2++;
+                                    }
+                                }
+                            }
+                            else if (type.includes('vegas')) { if (disp === 'X') endStat1++; else if (val === 10) endStat2++; }
+                            else if (type.includes('nfaa')) { if (disp === 'X') endStat1++; else if (val === 5) endStat2++; }
+                        });
+                        countA += endStat1;
+                        countB += endStat2;
+                        
+                        let rowSuffix = "";
+                        const hasTwoStats = headerSuffix.split(',').length === 3;
+                        if (hasTwoStats) rowSuffix = `,${endStat1},${endStat2}`;
+                        else rowSuffix = `,${endStat1}`;
+
+                        csv += `${idx + 1},${vals.join(',')},${endSum},${running}${rowSuffix}\n`;
+                    });
+
+                    const emptyCols = ",".repeat(arrowColCount + 1); 
+                    let statPart = "";
+                    const hasTwoStats = headerSuffix.split(',').length === 3;
+                    if (hasTwoStats) statPart = `,${countA},${countB}`;
+                    else statPart = `,${countA}`;
+
+                    csv += `TOTAL${emptyCols},${running}${statPart}\n`;
+
+                    if (shooterIndex < this.data.shooters.length - 1) {
+                        csv += "\n\n";
+                    }
+                });
+                return csv;
+            },
+
+            downloadCSV() {
+                const csv = this.generateCSV();
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", `archery_scorecards_${new Date().toISOString().slice(0,10)}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                this.showToast("Downloading CSV...");
+                this.closeTextExportModal();
+            },
+
+            showToast(msg) {
+                const t = document.getElementById('toast');
+                document.getElementById('toast-msg').innerHTML = msg; 
+                t.classList.remove('translate-y-20', 'opacity-0', 'scale-90');
+                t.classList.add('scale-100');
+                t.classList.add('pointer-events-none');
+                if(this.toastTimer) clearTimeout(this.toastTimer);
+                this.toastTimer = setTimeout(() => {
+                    this.hideToast();
+                }, 5000);
+            },
+            
+            hideToast() {
+                const t = document.getElementById('toast');
+                t.classList.remove('scale-100');
+                t.classList.add('translate-y-20', 'opacity-0', 'scale-90');
+            },
+
+            copyToClipboard() {
+                const csv = this.generateCSV();
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(csv).then(() => {
+                        this.showToast("Copied Scorecards!");
+                        this.closeTextExportModal();
+                    }).catch(() => this.fallbackCopy(csv));
+                } else {
+                    this.fallbackCopy(csv);
+                }
+            },
+
+            fallbackCopy(text) {
+                const ta = document.getElementById('clipboard-target');
+                ta.value = text;
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    this.showToast("Copied Scorecards!");
+                    this.closeTextExportModal();
+                } catch (e) {
+                    this.showAlert("Copy failed.");
+                }
+            }
+        };
+        
+        app.init();
+    </script>
+</body>
+</html>

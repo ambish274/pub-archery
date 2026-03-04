@@ -30,3 +30,7 @@ Background.....#0f172a.......Main Application Canvas (Dark Blue)
 Banner Text.....#f8fafc..........High-contrast readability (Off-White)
 
 Text Stroke......#1e293b.......Visual separation/depth (Slate Blue)
+
+I have developed a Google Spreadsheet template that automatically organizes scores into a leaderboard and calculates shooter handicaps. Please note that this automation is powered by a custom Google Apps Script. As a result, users will be prompted to grant authorization permissions the first time they run the tool. Because Google’s standard security warning for custom scripts can sometimes be confusing for first-time users, you may want to provide a brief heads-up alongside the link.
+
+Template Link: https://docs.google.com/spreadsheets/d/1cUlBeGbIu_ehC8jaX51omy6B6bWt_as5Y2WTuznxlKY/copy
